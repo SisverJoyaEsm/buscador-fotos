@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Catálogo de Modelos - La Esmeralda</title>
+  <style>
+    :root {
+      --primary-color: #0f2b1d;
+      --accent-color: #c5a059;
+      --bg-color: #f8f9fa;
+      --card-bg: #ffffff;
+      --text-main: #333333;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: var(--bg-color); color: var(--text-main);
+      margin: 0; padding: 24px 16px; min-height: 100vh;
+      display: flex; flex-direction: column; align-items: center;
+    }
+    .container {
+      background: var(--card-bg); padding: 32px 24px; border-radius: 16px;
+      box-shadow: 0 8px 30px rgba(0,0,0,.08); width: 100%; max-width: 650px;
+      text-align: center; border-top: 4px solid var(--accent-color);
+    }
+    h2 { color: var(--primary-color); margin: 0; font-size: 26px; font-weight: 600; }
+    p.subtitle { color: #666; font-size: 14px; margin: 6px 0 22px; }
+    .sesion { font-size: 12px; color: #777; margin: -10px 0 16px; display: none; }
+    .sesion a { color: var(--primary-color); cursor: pointer; text-decoration: underline; }
+    .search-box { display: flex; gap: 10px; margin-bottom: 14px; }
+    input[type="text"], input[type="password"] {
+      flex: 1; min-width: 0; padding: 14px 16px; border: 2px solid #e0e0e0;
+      border-radius: 10px; font-size: 16px; outline: none;
+    }
+    #codigoInput { text-transform: uppercase; }
+    input:focus { border-color: var(--accent-color); box-shadow: 0 0 0 3px rgba(197,160,89,.15); }
+    button {
+      padding: 14px 24px; background: var(--primary-color); color: #fff; border: none;
+      border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; transition: background .3s ease;
+    }
+    button:hover { background: #163d28; }
+    button:disabled { opacity: .6; cursor: wait; }
+    #status { margin: 6px 0 0; font-size: 15px; font-weight: 500; color: #555; min-height: 22px; }
+    .lista { margin-top: 20px; display: flex; flex-direction: column; gap: 10px; text-align: left; }
+    .fila {
+      display: flex; justify-content: space-between; align-items: center; gap: 12px;
+      padding: 12px 16px; background: #faf8f5; border: 1px solid #eaeaea; border-radius: 12px;
+      animation: fadeIn .3s ease-in-out;
+    }
+    .fila .nombre { font-weight: 600; color: var(--primary-color); font-size: 15px; word-break: break-word; }
+    .fila a {
+      flex-shrink: 0; background: var(--accent-color); color: #fff; text-decoration: none;
+      padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight: 700;
+    }
+    .fila a:hover { filter: brightness(.92); }
+    #btnMas { margin-top: 6px; background: #fff; color: var(--primary-color); border: 2px solid var(--accent-color); }
+    #btnMas:hover { background: #fffdf8; }
+    #login {
+      position: fixed; inset: 0; background: rgba(15,43,29,.97); z-index: 100;
+      display: flex; align-items: center; justify-content: center; padding: 20px;
+    }
+    #login .box { background: #fff; border-radius: 16px; padding: 30px 24px; width: 100%; max-width: 380px; text-align: center; border-top: 4px solid var(--accent-color); }
+    #login h3 { margin: 0 0 6px; color: var(--primary-color); }
+    #login p { margin: 0 0 18px; font-size: 13px; color: #666; }
+    #login .search-box { margin-bottom: 8px; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  </style>
+  <script src="datos.js"></script>
+</head>
+<body>
+
+  <div id="login">
+    <div class="box">
+      <h3>Acceso a asesoras</h3>
+      <p>Ingresa la contraseña del catálogo.</p>
+      <div class="search-box">
+        <input type="password" id="claveInput" placeholder="Contraseña" autocomplete="off">
+        <button id="btnEntrar">Entrar</button>
+      </div>
+      <div id="loginStatus" style="font-size:14px;min-height:20px;"></div>
+    </div>
+  </div>
+
+  <div class="container">
+    <h2>Catálogo de Modelos</h2>
+    <p class="subtitle">Joyería La Esmeralda — Consulta de fotografías por código</p>
+    <div class="sesion" id="sesion"><a id="btnSalir">Cerrar sesión</a></div>
+
+    <div class="search-box">
+      <input type="text" id="codigoInput" placeholder="Ej. PC38, PC38ESM o H2-PC38" autocomplete="off" autocapitalize="characters">
+      <button id="btnBuscar">Buscar</button>
+    </div>
+
+    <div id="status">Ingresa un código para consultar las fotos.</div>
+    <div class="lista" id="lista"></div>
+  </div>
+
+  <script>
+    const PAGINA = 40;          // fotos por bloque
+    const MIN_CARACTERES = 2;
+
+    const $ = (id) => document.getElementById(id);
+    const norm = (s) => s.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const natural = (a, b) => a.nombre.localeCompare(b.nombre, "es", { numeric: true, sensitivity: "base" });
+    const b64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+
+    let entradas = [];
+    let resultados = [];
+    let mostrados = 0;
+
+    // ---------- Acceso: el catálogo viaja cifrado y solo se abre con la contraseña ----------
+    async function descifrar(clave) {
+      const D = window.DATOS;
+      if (!D) throw new Error("sin_datos");
+      if (!window.crypto || !crypto.subtle) throw new Error("sin_crypto");
+      const km = await crypto.subtle.importKey("raw", new TextEncoder().encode(clave), "PBKDF2", false, ["deriveKey"]);
+      const key = await crypto.subtle.deriveKey(
+        { name: "PBKDF2", salt: b64(D.s), iterations: D.it, hash: "SHA-256" },
+        km, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+      const plano = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(D.i) }, key, b64(D.c));
+      return JSON.parse(new TextDecoder().decode(plano));
+    }
+
+    function indexar(datos) {
+      entradas = [];
+      for (const [nombre, sufijo] of datos.d) {
+        const url = datos.p + sufijo;
+        if (!/^https:\/\//i.test(url)) continue;
+        const tokens = nombre.toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
+        const clave = tokens.join("");
+        if (!clave) continue; // nombres sin letras ni números no son buscables
+        const acum = new Set();
+        let a = "";
+        for (const t of tokens) { a += t; acum.add(a); }
+        entradas.push({ nombre, url, clave, tokens, acum });
+      }
+    }
+
+    function mostrarApp(ok) {
+      $("login").style.display = ok ? "none" : "flex";
+      $("sesion").style.display = ok ? "block" : "none";
+      if (ok) $("codigoInput").focus();
+    }
+
+    async function entrar(claveGuardada) {
+      const st = $("loginStatus"), btn = $("btnEntrar");
+      const clave = (claveGuardada || $("claveInput").value).trim();
+      if (!clave) { st.style.color = "#d9534f"; st.textContent = "Ingresa la contraseña."; return; }
+      btn.disabled = true; st.style.color = "#666"; st.textContent = "Validando...";
+      try {
+        const datos = await descifrar(clave);
+        indexar(datos);
+        try { sessionStorage.setItem("ce_k", clave); } catch {}
+        $("claveInput").value = ""; st.textContent = "";
+        mostrarApp(true);
+      } catch (e) {
+        try { sessionStorage.removeItem("ce_k"); } catch {}
+        st.style.color = "#d9534f";
+        st.textContent =
+          e.message === "sin_datos" ? "No se encontró el catálogo (datos.js)." :
+          e.message === "sin_crypto" ? "Este navegador no permite abrir el catálogo. Actualízalo." :
+          "Contraseña incorrecta.";
+      } finally { btn.disabled = false; }
+    }
+
+    function salir() {
+      try { sessionStorage.removeItem("ce_k"); } catch {}
+      entradas = []; resultados = []; mostrados = 0;
+      $("lista").innerHTML = ""; $("codigoInput").value = "";
+      $("status").textContent = "Ingresa un código para consultar las fotos.";
+      mostrarApp(false);
+    }
+
+    // ---------- Búsqueda ----------
+    // La consulta ignora puntos, guiones, espacios y mayúsculas.
+    // 4 = las piezas de lo escrito aparecen en orden en palabras distintas, saltando palabras intermedias
+    //     (PC38ESM -> H2-PC38.A.ESM)
+    function coincideSegmentos(k, T) {
+      const memo = new Map();
+      function f(pos, ti, primera) {
+        if (pos === k.length) return true;
+        const m = pos + "|" + ti + "|" + primera;
+        if (memo.has(m)) return memo.get(m);
+        let ok = false;
+        for (let i = ti; i < T.length && !ok; i++) {
+          const t = T[i];
+          const ini = primera ? t.length : 1; // la primera pieza puede empezar en cualquier parte; las demás, al inicio de palabra
+          for (let s = 0; s < ini && !ok; s++) {
+            let L = 0;
+            while (s + L < t.length && pos + L < k.length && t[s + L] === k[pos + L]) L++;
+            for (let l = L; l >= 2 && !ok; l--) {
+              if (f(pos + l, i + 1, false)) ok = true;
+            }
+          }
+        }
+        memo.set(m, ok);
+        return ok;
+      }
+      return f(0, 0, true);
+    }
+
+    // 0 = código completo o inicio por palabras (PC38 -> PC38.A.ESM)
+    // 1 = el nombre empieza con lo escrito
+    // 2 = alguna palabra empieza con lo escrito
+    // 3 = lo escrito aparece en cualquier parte (PC38 -> H2-00PC38A)
+    // 4 = piezas en orden saltando palabras (PC38ESM -> H2-PC38.A.ESM)
+    function rango(e, k) {
+      if (e.acum.has(k)) return 0;
+      if (e.clave.startsWith(k)) return 1;
+      if (e.tokens.some((t) => t.startsWith(k))) return 2;
+      if (e.clave.includes(k)) return 3;
+      if (k.length >= 4 && coincideSegmentos(k, e.tokens)) return 4;
+      return -1;
+    }
+
+    function filaDom(e) {
+      const fila = document.createElement("div");
+      fila.className = "fila";
+      const nombre = document.createElement("span");
+      nombre.className = "nombre";
+      nombre.textContent = e.nombre.toUpperCase();
+      const a = document.createElement("a");
+      a.href = e.url; a.target = "_blank"; a.rel = "noopener noreferrer";
+      a.textContent = "Ver foto";
+      fila.append(nombre, a);
+      return fila;
+    }
+
+    function pintarMas() {
+      const cont = $("lista");
+      const viejo = $("btnMas");
+      if (viejo) viejo.remove();
+      resultados.slice(mostrados, mostrados + PAGINA).forEach((e) => cont.appendChild(filaDom(e)));
+      mostrados = Math.min(resultados.length, mostrados + PAGINA);
+      if (mostrados < resultados.length) {
+        const b = document.createElement("button");
+        b.id = "btnMas";
+        b.textContent = `Mostrar más (${resultados.length - mostrados} restantes)`;
+        b.onclick = pintarMas;
+        cont.appendChild(b);
+      }
+    }
+
+    function buscar() {
+      const entrada = $("codigoInput").value;
+      const status = $("status");
+      $("lista").innerHTML = "";
+      resultados = []; mostrados = 0;
+
+      const k = norm(entrada);
+      if (k.length < MIN_CARACTERES) {
+        status.style.color = "#d9534f";
+        status.textContent = `Escribe al menos ${MIN_CARACTERES} caracteres del código.`;
+        return;
+      }
+      const conRango = [];
+      for (const e of entradas) {
+        const r = rango(e, k);
+        if (r >= 0) conRango.push({ e, r });
+      }
+      conRango.sort((x, y) => x.r - y.r || natural(x.e, y.e));
+      resultados = conRango.map((x) => x.e);
+
+      if (!resultados.length) {
+        status.style.color = "#d9534f";
+        status.textContent = `No se encontró ninguna foto con "${entrada.trim()}".`;
+        return;
+      }
+      const cercanas = conRango.filter((x) => x.r <= 1).length;
+      status.style.color = "#28a745";
+      status.textContent = cercanas && cercanas < resultados.length
+        ? `${resultados.length} fotos (${cercanas} empiezan con el código; el resto lo contiene).`
+        : `${resultados.length} ${resultados.length === 1 ? "foto encontrada" : "fotos encontradas"}.`;
+      pintarMas();
+    }
+
+    $("btnEntrar").onclick = () => entrar();
+    $("claveInput").addEventListener("keydown", (e) => { if (e.key === "Enter") entrar(); });
+    $("btnBuscar").onclick = buscar;
+    $("codigoInput").addEventListener("keydown", (e) => { if (e.key === "Enter") buscar(); });
+    $("btnSalir").onclick = salir;
+
+    try { const k = sessionStorage.getItem("ce_k"); if (k) entrar(k); } catch {}
+  </script>
+</body>
+</html>
